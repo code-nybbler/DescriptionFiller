@@ -7,7 +7,6 @@ using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.UI.WebControls;
 using System.Windows.Forms;
 using XrmToolBox.Extensibility;
 using Label = Microsoft.Xrm.Sdk.Label;
@@ -276,7 +275,7 @@ namespace DescriptionFiller
                 UpdateViewDescriptions(entity);
             }
 
-            if (SelectedComponents.Contains("Fields"))
+            if (SelectedComponents.Contains("Fields*"))
             {
                 FieldDescription = FieldDescription.Replace("{table}", entity.DisplayName.UserLocalizedLabel.Label.ToString());
                 UpdateFieldDescriptions(entity);
@@ -313,73 +312,73 @@ namespace DescriptionFiller
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}.");
+                MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}");
             }
         }
 
         private void UpdateFormDescriptions(EntityMetadata entity)
         {
-            try
+            QueryExpression q = new QueryExpression("systemform")
             {
-                QueryExpression q = new QueryExpression("systemform")
-                {
-                    ColumnSet = new ColumnSet("name", "description", "type")
-                };
-                q.Criteria.AddCondition(new ConditionExpression("objecttypecode", ConditionOperator.Equal, entity.LogicalName));
+                ColumnSet = new ColumnSet("name", "description", "type")
+            };
+            q.Criteria.AddCondition(new ConditionExpression("objecttypecode", ConditionOperator.Equal, entity.LogicalName));
 
-                EntityCollection forms = Service.RetrieveMultiple(q);
+            EntityCollection forms = Service.RetrieveMultiple(q);
 
-                string desc;
-                foreach (Entity form in forms.Entities)
+            string desc;
+            foreach (Entity form in forms.Entities)
+            {
+                try
                 {
                     desc = FormDescription.Replace("{form}", form["name"].ToString()).Replace("{type}", form.FormattedValues["type"].ToString()).Replace("Quick View Form", "Quick View");
                     form["description"] = desc;
                     Service.Update(form);
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}.");
-            }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}");
+                }
+            }            
         }
 
         private void UpdateViewDescriptions(EntityMetadata entity)
         {
-            try
+            QueryExpression q = new QueryExpression("savedquery")
             {
-                QueryExpression q = new QueryExpression("savedquery")
-                {
-                    ColumnSet = new ColumnSet("name", "description")
-                };
-                q.Criteria.AddCondition(new ConditionExpression("querytype", ConditionOperator.Equal, 0));
-                q.Criteria.AddCondition(new ConditionExpression("returnedtypecode", ConditionOperator.Equal, entity.ObjectTypeCode));
+                ColumnSet = new ColumnSet("name", "description")
+            };
+            q.Criteria.AddCondition(new ConditionExpression("querytype", ConditionOperator.Equal, 0));
+            q.Criteria.AddCondition(new ConditionExpression("returnedtypecode", ConditionOperator.Equal, entity.ObjectTypeCode));
 
-                EntityCollection views = Service.RetrieveMultiple(q);
+            EntityCollection views = Service.RetrieveMultiple(q);
 
-                string desc;
-                foreach (Entity view in views.Entities)
+            string desc;
+            foreach (Entity view in views.Entities)
+            {
+                try
                 {
                     desc = ViewDescription.Replace("{view}", view["name"].ToString());
                     view["description"] = desc;
                     Service.Update(view);
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}.");
-            }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}");
+                }
+            }            
         }
 
         private void UpdateFieldDescriptions(EntityMetadata entity)
         {
-            try
-            {
-                UpdateAttributeRequest updateRequest;
+            UpdateAttributeRequest updateRequest;
 
-                string desc;
-                foreach (AttributeMetadata attr in entity.Attributes)
+            string desc;
+            foreach (AttributeMetadata attr in entity.Attributes.Where(x => x.IsCustomizable.Value == true && x.DisplayName.UserLocalizedLabel != null && x.IsCustomAttribute.Value == true && x.IsPrimaryId.Value == false))
+            {
+                try
                 {
-                    desc = FieldDescription;//.Replace("{field}", attr.DisplayName.UserLocalizedLabel.Label.ToString());
+                    desc = FieldDescription.Replace("{field}", attr.DisplayName.UserLocalizedLabel.Label.ToString());
                     attr.Description = new Label(desc, 1033);
 
                     updateRequest = new UpdateAttributeRequest
@@ -390,10 +389,10 @@ namespace DescriptionFiller
 
                     Service.Execute(updateRequest);
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}.");
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}");
+                }
             }
         }
     }
