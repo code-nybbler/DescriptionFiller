@@ -23,6 +23,7 @@ namespace DescriptionFiller
         private string FormDescription;
         private string ViewDescription;
         private string FieldDescription;
+        private string WorkflowDescription;
 
         public DescriptionFillerControl()
         {
@@ -65,6 +66,7 @@ namespace DescriptionFiller
             FormDescription = txt_FormDesc.Text;
             ViewDescription = txt_ViewDesc.Text;
             FieldDescription = txt_FieldDesc.Text;
+            WorkflowDescription = txt_WorkflowDesc.Text;
 
             foreach (string entity in lst_Entities.SelectedItems)
             {
@@ -77,13 +79,16 @@ namespace DescriptionFiller
             }
 
             if (chk_Forms.Checked == true)
-                SelectedComponents.Add(chk_Forms.Text);
+                SelectedComponents.Add("Forms");
 
             if (chk_Views.Checked == true)
-                SelectedComponents.Add(chk_Views.Text);
+                SelectedComponents.Add("Views");
 
             if (chk_Fields.Checked == true)
-                SelectedComponents.Add(chk_Fields.Text);
+                SelectedComponents.Add("Fields");
+
+            if (chk_Workflows.Checked == true)
+                SelectedComponents.Add("Workflows");
 
             ExecuteMethod(FillDescriptions);
         }
@@ -116,11 +121,13 @@ namespace DescriptionFiller
             chk_Forms.Enabled = false;
             chk_Views.Enabled = false;
             chk_Fields.Enabled = false;
+            chk_Workflows.Enabled = false;
 
             txt_TableDesc.Enabled = false;
             txt_FormDesc.Enabled = false;
             txt_ViewDesc.Enabled = false;
             txt_FieldDesc.Enabled = false;
+            txt_WorkflowDesc.Enabled = false;
         }
 
         private void EnableInputs()
@@ -134,11 +141,13 @@ namespace DescriptionFiller
             chk_Forms.Enabled = true;
             chk_Views.Enabled = true;
             chk_Fields.Enabled = true;
+            chk_Workflows.Enabled = true;
 
             txt_TableDesc.Enabled = true;
             txt_FormDesc.Enabled = true;
             txt_ViewDesc.Enabled = true;
             txt_FieldDesc.Enabled = true;
+            txt_WorkflowDesc.Enabled = true;
         }
 
         private void FillDescriptions()
@@ -275,10 +284,16 @@ namespace DescriptionFiller
                 UpdateViewDescriptions(entity);
             }
 
-            if (SelectedComponents.Contains("Fields*"))
+            if (SelectedComponents.Contains("Fields"))
             {
                 FieldDescription = FieldDescription.Replace("{table}", entity.DisplayName.UserLocalizedLabel.Label.ToString());
                 UpdateFieldDescriptions(entity);
+            }
+
+            if (SelectedComponents.Contains("Workflows"))
+            {
+                WorkflowDescription = WorkflowDescription.Replace("{table}", entity.DisplayName.UserLocalizedLabel.Label.ToString());
+                UpdateWorkflowDescriptions(entity);
             }
         }
 
@@ -331,7 +346,7 @@ namespace DescriptionFiller
             {
                 try
                 {
-                    desc = FormDescription.Replace("{form}", form["name"].ToString()).Replace("{type}", form.FormattedValues["type"].ToString()).Replace("Quick View Form", "Quick View");
+                    desc = FormDescription.Replace("{form}", form["name"].ToString()).Replace("{type}", form.FormattedValues["type"].ToString().Replace("Form", ""));
                     form["description"] = desc;
                     Service.Update(form);
                 }
@@ -348,7 +363,7 @@ namespace DescriptionFiller
             {
                 ColumnSet = new ColumnSet("name", "description")
             };
-            q.Criteria.AddCondition(new ConditionExpression("querytype", ConditionOperator.Equal, 0));
+            //q.Criteria.AddCondition(new ConditionExpression("querytype", ConditionOperator.Equal, 0));
             q.Criteria.AddCondition(new ConditionExpression("returnedtypecode", ConditionOperator.Equal, entity.ObjectTypeCode));
 
             EntityCollection views = Service.RetrieveMultiple(q);
@@ -358,7 +373,7 @@ namespace DescriptionFiller
             {
                 try
                 {
-                    desc = ViewDescription.Replace("{view}", view["name"].ToString());
+                    desc = ViewDescription.Replace("{view}", view["name"].ToString().Replace("View", ""));
                     view["description"] = desc;
                     Service.Update(view);
                 }
@@ -388,6 +403,64 @@ namespace DescriptionFiller
                     };
 
                     Service.Execute(updateRequest);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Desciption update failed. Please reference exception: {ex.Message}");
+                }
+            }
+        }
+
+        private void UpdateWorkflowDescriptions(EntityMetadata entity)
+        {
+            QueryExpression q = new QueryExpression("workflow")
+            {
+                ColumnSet = new ColumnSet("workflowid", "name", "description", "category", "statecode", "xaml")
+            };
+            q.Criteria.AddCondition("type", ConditionOperator.Equal, 1); // definition
+            q.Criteria.AddCondition("primaryentity", ConditionOperator.Equal, entity.ObjectTypeCode); // current entity
+            q.Criteria.AddCondition("statecode", ConditionOperator.In, 0, 1); // draft or activated
+
+            EntityCollection workflows = Service.RetrieveMultiple(q);
+
+            string desc;
+            bool published;
+            SetStateRequest stateReq;
+            foreach (Entity workflow in workflows.Entities)
+            {
+                try
+                {
+                    published = workflow.FormattedValues["statecode"].ToString() == "Activated";
+                    desc = WorkflowDescription.Replace("{process}", workflow["name"].ToString()).Replace("{category}", workflow.FormattedValues["category"].ToString());
+                    
+                    if (published == true)
+                    {
+                        // deactivate process
+                        stateReq = new SetStateRequest
+                        {
+                            EntityMoniker = workflow.ToEntityReference(),
+                            State = new OptionSetValue(0),
+                            Status = new OptionSetValue(1)
+                        };
+                        Service.Execute(stateReq);
+
+                        workflow["description"] = desc;
+                        Service.Update(workflow);
+
+                        // re-activate process
+                        stateReq = new SetStateRequest
+                        {
+                            EntityMoniker = workflow.ToEntityReference(),
+                            State = new OptionSetValue(1),
+                            Status = new OptionSetValue(2)
+                        };
+                        Service.Execute(stateReq);
+                    }
+                    else
+                    {
+                        workflow["description"] = desc;
+                        Service.Update(workflow);
+                    }                    
                 }
                 catch (Exception ex)
                 {
